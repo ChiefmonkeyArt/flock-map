@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# flock-map-deploy — forced-command entrypoint for the flock-map deploy key.
+#
+# sshd runs this script AS `ubuntu` whenever the restricted deploy key
+# connects; the key grants NO shell and no pty. The script:
+#   1. reads a gzipped tarball of the static app on stdin,
+#   2. validates the contents against a strict whitelist
+#      (index.html, cams.js, manifest.json — nothing else),
+#   3. hands the payload to the pinned root installer via a
+#      fixed-path sudoers rule.
+#
+# Nothing else is possible through this key.
+set -euo pipefail
+
+STAGE_DIR="/var/lib/flock-map-deploy"
+STAGE="${STAGE_DIR}/incoming.tar.gz"
+ALLOWED="index.html cams.js manifest.json"
+
+mkdir -p "$STAGE_DIR"
+
+# Read the payload in a single pass; refuse empty input.
+if ! cat > "$STAGE"; then
+  echo "error: failed to read payload" >&2
+  rm -f "$STAGE"
+  exit 1
+fi
+size="$(stat -c%s "$STAGE" 2>/dev/null || echo 0)"
+if [[ "$size" == "0" ]]; then
+  echo "error: empty payload" >&2
+  rm -f "$STAGE"
+  exit 1
+fi
+
+# Strict whitelist: every entry must be one of the three app files, verbatim
+# (no paths, no directories, no symlinks, no absolute paths).
+listing="$(tar -tzf "$STAGE" 2>/dev/null)" || {
+  echo "error: payload is not a valid gzip tarball" >&2
+  rm -f "$STAGE"
+  exit 1
+}
+for f in $listing; do
+  case "$f" in
+    index.html|cams.js|manifest.json) ;;
+    *)
+      echo "error: unexpected entry in payload: '$f'" >&2
+      rm -f "$STAGE"
+      exit 1
+      ;;
+  esac
+done
+for f in $ALLOWED; do
+  if ! grep -qxF "$f" <<<"$listing"; then
+    echo "error: required file '$f' missing from payload" >&2
+    rm -f "$STAGE"
+    exit 1
+  fi
+done
+
+# Hand off to the pinned root installer. The sudoers rule permits ONLY this
+# exact command and this exact path — the dispatcher is not writable by
+# `ubuntu`, so the delivered behavior is fixed.
+exec sudo -n /usr/local/sbin/flock-map-install-root "$STAGE"

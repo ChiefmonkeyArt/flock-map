@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-# install-flock-map.sh — install the Flock Surveillance Map on a Torii VPS.
+# flock-map-install-root — pinned root installer for Flock Map.
 #
-# Static single-page app under the standard Torii layout:
-#   /apps/flock-map/{current,releases,data}
-# Mirrors the quest/continuum convention: release snapshot + atomic `current`
-# symlink flip + nginx fragment + `torii register` for the launcher tile.
+# Invoked ONLY by /usr/local/bin/flock-map-deploy via a fixed-path sudoers
+# rule; never called interactively. Takes the staged tarball path as its
+# single argument and performs the atomic install.
 #
-# Usage (as root on the VPS), with the release tarball in the SAME directory
-# as this script (scp both to /tmp):
-#   sudo bash install-flock-map.sh
+# Owned root:root, mode 0755, and NOT writable by `ubuntu`, so the sudoers
+# rule that pins this exact path delivers a fixed behavior regardless of
+# what the deploy key sends.
 set -euo pipefail
 
 APP="flock-map"
@@ -22,26 +21,42 @@ RELEASE_DIR="${APP_ROOT}/releases/$(date +%Y%m%d-%H%M%S)"
 CURRENT_LINK="${APP_ROOT}/current"
 DATA_DIR="${APP_ROOT}/data"
 FRAGMENT_FILE="/opt/torii/nginx-fragments/${APP}.conf"
-BUNDLE="$(dirname "$0")/flock-release.tar.gz"
+BUNDLE="$1"
+STAGE_DIR="/var/lib/flock-map-deploy"
 
 log() { printf "\033[36m==>\033[0m %s\n" "$*"; }
 die() { printf "\033[31mxx  %s\033[0m\n" "$*" >&2; exit 1; }
 
-[[ $EUID -eq 0 ]] || die "must run as root (sudo bash install-flock-map.sh)"
-[[ -f "$BUNDLE" ]] || die "release tarball not found next to script: $BUNDLE"
+[[ $EUID -eq 0 ]] || die "must run as root"
+if [[ "$(id -un)" != "root" ]]; then die "unexpected caller"; fi
 
-log "creating /apps/flock-map layout"
+[[ "$#" -eq 1 ]] || die "usage: flock-map-install-root <tarball>"
+[[ -f "$BUNDLE" ]] || die "tarball not found: $BUNDLE"
+
+# Re-validate: the caller (dispatcher) already whitelisted, but the root
+# installer re-checks independently so a compromised dispatcher can't smuggle
+# arbitrary files past the sudo boundary.
+listing="$(tar -tzf "$BUNDLE" 2>/dev/null)" || die "invalid tarball"
+for f in $listing; do
+  case "$f" in
+    index.html|cams.js|manifest.json) ;;
+    *) die "unexpected entry in payload: '$f'";;
+  esac
+done
+for f in index.html cams.js manifest.json; do
+  grep -qxF "$f" <<<"$listing" || die "required file '$f' missing"
+done
+
+log "creating ${APP_ROOT} layout"
 install -d -m 0755 "${RELEASE_DIR}" "${DATA_DIR}"
 
 log "extracting release"
 tar -xzf "$BUNDLE" -C "${RELEASE_DIR}"
-# Static files owned root:www-data (nginx reads as www-data), like quest releases.
 chown -R root:www-data "${RELEASE_DIR}"
 chown -R root:www-data "${DATA_DIR}"
 
 log "flipping current -> ${RELEASE_DIR}"
-rm -f "${CURRENT_LINK}"
-ln -s "${RELEASE_DIR}" "${CURRENT_LINK}"
+ln -sfn "${RELEASE_DIR}" "${CURRENT_LINK}"
 
 log "writing nginx fragment ${FRAGMENT_FILE}"
 install -d -m 0755 /opt/torii/nginx-fragments
@@ -50,7 +65,6 @@ cat > "${FRAGMENT_FILE}" <<'NGINX'
 # Static single-page app mounted at /flock-map/.
 location /flock-map/ {
     alias /apps/flock-map/current/;
-    # The app's bundles are versioned filenames (cams.js), so immutable.
     expires 1h;
     add_header Cache-Control "public, max-age=3600";
 }
@@ -71,5 +85,8 @@ log "registering '${APP}' launcher tile"
 
 log "reloading nginx"
 /usr/local/bin/torii reload
+
+# Remove the staged payload — never leave copies on disk.
+rm -f "$BUNDLE"
 
 log "done. open: https://chiefmonkey.art/flock-map/"
