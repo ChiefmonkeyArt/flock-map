@@ -11,12 +11,29 @@ set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
 
 DEPLOY_USER="ubuntu"
-PUBKEY="$1"                          # the flock-map-deploy ed25519 public key
+PUBKEY_BLOB="${1:-}"
+
+# The key arrives as the space-free base64 BLOB only (a full "ssh-ed25519 <blob> <comment>"
+# line has spaces, which `sudo bash -s --` word-splits — this is exactly why the first
+# attempt wrote a truncated authorized_keys entry). Reconstruct the full key here.
+if [[ -z "$PUBKEY_BLOB" || ! "$PUBKEY_BLOB" =~ ^[A-Za-z0-9+/]+={0,2}$ ]]; then
+  echo "error: expected an ssh-ed25519 public-key base64 blob (no spaces) as \$1" >&2
+  exit 1
+fi
+PUBKEY="ssh-ed25519 ${PUBKEY_BLOB}"
+
+# Derive the deploy user's REAL home (never assume /home/<user>).
+# This mirrors quest/ops/install-deploy-ssh.sh (ADR-0101), the proven pattern.
+DEPLOY_HOME="$(getent passwd "$DEPLOY_USER" | cut -d: -f6)"
+DEPLOY_HOME="${DEPLOY_HOME:-/home/$DEPLOY_USER}"
 
 BIN="/usr/local/bin/flock-map-deploy"
 ROOT_INSTALL="/usr/local/sbin/flock-map-install-root"
 STAGE_DIR="/var/lib/flock-map-deploy"
 SUDOERS="/etc/sudoers.d/flock-map-deploy"
+AUTHKEY="${DEPLOY_HOME}/.ssh/authorized_keys"
+
+echo "==> deploy user: $DEPLOY_USER (home $DEPLOY_HOME)"
 
 # --- 1. Write the forced-command dispatcher (root-owned, not ubuntu-writable)
 install -d -m 0755 /usr/local/bin /usr/local/sbin
@@ -99,19 +116,25 @@ cat > "$SUDOERS" <<'SUDOERS'
 ubuntu ALL=(root) NOPASSWD: /usr/local/sbin/flock-map-install-root
 SUDOERS
 chmod 0440 "$SUDOERS"
+chown root:root "$SUDOERS"
 visudo -c >/dev/null || { echo "sudoers syntax error" >&2; exit 1; }
 
 # --- 5. Authorized key: forced command + no shell/pty/forwarding
-AUTHKEY_DIR="/home/${DEPLOY_USER}/.ssh"
-AUTHKEY="${AUTHKEY_DIR}/authorized_keys"
-install -d -m 0700 -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" "$AUTHKEY_DIR"
+install -d -m 0700 -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" "${DEPLOY_HOME}/.ssh"
 touch "$AUTHKEY"; chown "${DEPLOY_USER}:${DEPLOY_USER}" "$AUTHKEY"; chmod 0600 "$AUTHKEY"
 ENTRY="command=\"${BIN}\",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty ${PUBKEY} flock-map-deploy@github-actions"
-# idempotent: remove any prior entry for this pubkey, then append
-if grep -qF "${PUBKEY}" "$AUTHKEY"; then
-  grep -vF "${PUBKEY}" "$AUTHKEY" > "$AUTHKEY.tmp" && mv "$AUTHKEY.tmp" "$AUTHKEY"
-fi
+# idempotent: drop any prior line carrying this pubkey, then append the current one.
+grep -vF "${PUBKEY}" "$AUTHKEY" > "$AUTHKEY.tmp" 2>/dev/null || true
+mv "$AUTHKEY.tmp" "$AUTHKEY"
 printf '%s\n' "$ENTRY" >> "$AUTHKEY"
 chown "${DEPLOY_USER}:${DEPLOY_USER}" "$AUTHKEY"; chmod 0600 "$AUTHKEY"
+
+# --- 6. Self-verify WITHOUT dumping secrets: confirm the exact entry landed.
+count="$(grep -cF "$PUBKEY" "$AUTHKEY" || true)"
+echo "==> authorized_keys path: $AUTHKEY"
+echo "==> pubkey present in authorized_keys (count, expect 1): $count"
+echo "==> entry (public key + forced command only, no secret):"
+grep -F "$PUBKEY" "$AUTHKEY"
+[[ "$count" -eq 1 ]] || { echo "error: key did not land in authorized_keys" >&2; exit 1; }
 
 echo "bootstrap complete: restricted flock-map deploy key authorized"
