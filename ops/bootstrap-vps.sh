@@ -59,7 +59,7 @@ done
 for f in index.html cams.js manifest.json; do
   grep -qxF "$f" <<<"$listing" || { echo "error: missing required file '$f'" >&2; rm -f "$STAGE"; exit 1; }
 done
-exec sudo -n "$ROOT_INSTALL" "$STAGE"
+exec sudo -n /usr/local/sbin/flock-map-install-root "$STAGE"
 SCRIPT
 chown root:root "$BIN"; chmod 0755 "$BIN"
 
