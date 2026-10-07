@@ -1,0 +1,3 @@
+# Generated unsigned events + dev screenshots are reproducible artifacts, not source.
+napplet/dist/*.png
+napplet/dist/*.jpg

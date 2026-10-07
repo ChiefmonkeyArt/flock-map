@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Flock Map napplet — reference shell</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: #000; }
+    #frame { width: 100%; height: 100%; border: 0; display: block; }
+  </style>
+</head>
+<body>
+  <iframe id="frame" sandbox="allow-scripts"></iframe>
+  <script id="shell">
+    // Reference NIP-5D shell (test harness only). Mirrors the production mount:
+    // resolve path tags -> blobs, re-hash the data files vs the aggregate, then
+    // inline EVERYTHING into one srcdoc (opaque origin cannot cross-fetch).
+    (async function () {
+      const s = { open: "<scr" + "ipt>", close: "</scr" + "ipt>", openTag: function (src) { return "<scr" + "ipt src=\"" + src + "\"></scr" + "ipt>"; } };
+      const frame = document.getElementById("frame");
+      const fail = (m) => { document.body.innerHTML = "<pre style='color:#e11d5c;padding:16px'>" + m + "</pre>"; };
+      async function sha256hex(buf) {
+        const d = await crypto.subtle.digest("SHA-256", buf);
+        return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, "0")).join("");
+      }
+      const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
+      const txt = async (p) => (await fetch(p)).text();
+
+      const [indexSrc, camsSrc, manifestSrc, lc, mc, mcd, leafletJs, mcJs] = await Promise.all([
+        txt("index.html"), txt("cams.js"), txt("manifest.json"),
+        txt("vendor/leaflet.css"), txt("vendor/MarkerCluster.css"),
+        txt("vendor/MarkerCluster.Default.css"),
+        txt("vendor/leaflet.js"), txt("vendor/leaflet.markercluster.js"),
+      ]);
+
+      // verify the two data files against the signed aggregate
+      const expect = {
+        "/cams.js": "ef960c3303c326c92fefe4c0145f29083c2e629bbdaa3f5f89b57e419a499f36",
+        "/manifest.json": "103e77859a34dd6a655bb15693c2e27867260c5380b88a956d0aa83e418d8342",
+      };
+      const camsSha = await sha256hex(new TextEncoder().encode(camsSrc));
+      const manifestSha = await sha256hex(new TextEncoder().encode(manifestSrc));
+      if (camsSha !== expect["/cams.js"]) return fail("/cams.js hash mismatch: " + camsSha);
+      if (manifestSha !== expect["/manifest.json"]) return fail("/manifest.json hash mismatch: " + manifestSha);
+
+      // extract the map logic from index.html (its final inline script) without
+      // typing the closing tag literally in this JS
+      const endTag = "</scr" + "ipt>";
+      const lastScript = indexSrc.lastIndexOf("<scr" + "ipt>");
+      const endClose = indexSrc.lastIndexOf(endTag);
+      const mapScript = indexSrc.slice(lastScript + 8, endClose);
+
+      // build the srcdoc from scratch (no literal closing-tag sequence in this JS)
+      const doc =
+        "<!DOCTYPE html><html><head><meta charset='utf-8'/>" +
+        "<base href='" + location.href.replace(/[^/]*$/, "") + "'>" +
+        "<style>" + lc + "\n" + mc + "\n" + mcd + "\n</style>" +
+        "</head><body><div id='map'></div><div id='status'>loading…</div>" +
+        s.openTag("data:text/javascript;base64," + b64(leafletJs)) +
+        s.openTag("data:text/javascript;base64," + b64(mcJs)) +
+        s.open + "window.__FLOCK_MANIFEST__ = " + manifestSrc + ";</scr" + "ipt>" +
+        s.open + camsSrc + "</scr" + "ipt>" +
+        s.open + mapScript + "</scr" + "ipt>" +
+        "</body></html>";
+
+      frame.srcdoc = doc;
+    })().catch(e => { document.body.innerHTML = "<pre style='color:#e11d5c;padding:16px'>shell error: " + e.stack + "</pre>"; });
+  </script>
+</body>
+</html>

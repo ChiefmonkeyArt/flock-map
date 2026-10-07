@@ -10,6 +10,7 @@ Served self-hosted at `https://chiefmonkey.art/flock-map/`.
 - `index.html` — Leaflet 1.9.4 + marker clustering (Esri dark basemap, no key)
 - `cams.js` — `window.CAMS` = `[lat, lon, name, operator, camera_type]`
 - `manifest.json` — signed dataset manifest (geohash cells)
+- `napplet/` — standalone Nostr napplet (NIP-5A kind 35129) — see `napplet/README.md`
 - `ops/flock-map-deploy` — forced-command dispatcher run by the restricted key
 - `ops/flock-map-install-root` — pinned root installer (fixed-path sudoers target)
 - `ops/bootstrap-vps.sh` — one-time (idempotent) VPS setup for the restricted key

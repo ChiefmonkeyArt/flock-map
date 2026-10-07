@@ -1,0 +1,36 @@
+{
+  "kind": 30617,
+  "pubkey": "ec79b568bdea63ca6091f5b84b0c639c10a0919e175fa09a4de3154f82906f25",
+  "created_at": 0,
+  "tags": [
+    [
+      "d",
+      "flock-map"
+    ],
+    [
+      "name",
+      "flock-map"
+    ],
+    [
+      "description",
+      "Self-hosted Flock Safety / ALPR camera surveillance map + standalone Nostr napplet."
+    ],
+    [
+      "clone",
+      "https://github.com/ChiefmonkeyArt/flock-map.git"
+    ],
+    [
+      "r",
+      "12b015bd4a7d9022140aac3c6a3e5e027000edcc"
+    ],
+    [
+      "relays",
+      "wss://chiefmonkey.art/relay"
+    ],
+    [
+      "web",
+      "https://chiefmonkey.art/flock-map/"
+    ]
+  ],
+  "content": "Flock Map — standalone self-hosted camera map and Nostr napplet (npm: flock-map)."
+}
