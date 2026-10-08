@@ -12,7 +12,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import { build, loadSource } from './build.mjs';
+import { build, loadSource, aggregateOf, PUBKEY_HEX, NAPPLET_FILES, VERSION } from './build.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -25,12 +25,12 @@ async function t(name, fn) {
 const html = read('index.html'), cams = read('cams.js');
 let DECODED = null;
 
-await t('build is reproducible and committed outputs are fresh', () => {
+await t('build is reproducible and every generated file is fresh', () => {
   const a = build(), b = build();
-  assert.equal(a['cams.js'], b['cams.js']);
-  assert.equal(a['index.html'], b['index.html']);
-  assert.equal(cams, a['cams.js'], 'cams.js is stale');
-  assert.equal(html, a['index.html'], 'index.html is stale');
+  for (const [f, body] of Object.entries(a.files)) {
+    assert.equal(body, b.files[f], `${f} not deterministic`);
+    assert.equal(read(f), body, `${f} is stale (run node tools/build.mjs)`);
+  }
 });
 
 await t('browser decoder round-trips every record losslessly', async () => {
@@ -80,9 +80,54 @@ await t('CSP pins inline scripts by hash; no third-party code origins', () => {
 
 await t('deploy payload stays inside the VPS whitelist', () => {
   const wf = read('.github/workflows/deploy-flock-map.yml');
-  assert.match(wf, /tar -czf flock-release\.tar\.gz index\.html cams\.js manifest\.json\n/);
-  for (const f of ['index.html', 'cams.js', 'manifest.json']) assert.ok(fs.existsSync(path.join(ROOT, f)));
+  assert.match(wf, /tar -czf flock-release\.tar\.gz index\.html cams\.js manifest\.json VERSION\n/);
+  for (const f of ['index.html', 'cams.js', 'manifest.json', 'VERSION']) assert.ok(fs.existsSync(path.join(ROOT, f)));
   assert.ok(Buffer.byteLength(cams) < 2_000_000, `cams.js too large: ${Buffer.byteLength(cams)}`);
+});
+
+const nap = read('napplet/index.html');
+
+await t('napplet is a single self-contained file carrying the same dataset', () => {
+  const m = nap.match(/<script>window\.FLOCK_PACK="([A-Za-z0-9+/=]+)";<\/script>/);
+  assert.ok(m, 'napplet must inline the packed dataset');
+  const sandbox = {}; new Function('window', cams)(sandbox);
+  assert.equal(m[1], sandbox.FLOCK_PACK, 'napplet and web app must ship the identical pack');
+  assert.doesNotMatch(nap, /<script[^>]+src=|<link[^>]+href=(?!"https:\/\/server\.arcgisonline\.com")/, 'napplet must not load sibling files');
+  assert.doesNotMatch(nap, /window\.napplet/, 'display-only: no shell capabilities');
+  const csp = nap.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)[1];
+  const scripts = [...nap.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((x) => x[1]);
+  assert.equal(scripts.length, 3);
+  for (const sc of scripts) assert.ok(csp.includes(`'sha256-${crypto.createHash('sha256').update(sc, 'utf8').digest('base64')}'`));
+  assert.doesNotMatch(csp, /'self'/, 'opaque-origin napplet needs no self source');
+  assert.match(nap, new RegExp(`VERSION = '${VERSION.replace(/\./g, '\\.')}'`));
+});
+
+await t('unsigned kind 35129 matches the napplet bytes exactly', () => {
+  const ev = JSON.parse(read('napplet/dist/flock-map.nip5a.unsigned.json'));
+  assert.equal(ev.kind, 35129); assert.equal(ev.pubkey, PUBKEY_HEX); assert.equal(ev.created_at, 0);
+  assert.ok(!('id' in ev) && !('sig' in ev), 'must be unsigned');
+  const paths = ev.tags.filter((x) => x[0] === 'path');
+  assert.deepEqual(paths.map((x) => x[1]), NAPPLET_FILES, 'bundle must be exactly the explicit file list');
+  const h = crypto.createHash('sha256').update(read('napplet/index.html'), 'utf8').digest('hex');
+  assert.equal(paths[0][2], h, 'path hash != napplet/index.html');
+  const x = ev.tags.find((y) => y[0] === 'x' && y[2] === 'aggregate');
+  assert.equal(x[1], aggregateOf(paths.map((p) => [p[1], p[2]])));
+  assert.ok(ev.tags.some((y) => y[0] === 'd' && y[1] === 'flock-map'));
+});
+
+await t('unsigned kind 30617 is well-formed NIP-34', () => {
+  const ev = JSON.parse(read('napplet/dist/flock-map.nip34.unsigned.json'));
+  assert.equal(ev.kind, 30617); assert.equal(ev.pubkey, PUBKEY_HEX); assert.equal(ev.created_at, 0);
+  assert.ok(!('id' in ev) && !('sig' in ev), 'must be unsigned');
+  const tag = (k) => ev.tags.filter((y) => y[0] === k);
+  assert.deepEqual(tag('d'), [['d', 'flock-map']]);
+  assert.deepEqual(tag('clone'), [['clone', 'https://github.com/ChiefmonkeyArt/flock-map.git']]);
+  assert.deepEqual(tag('r'), [['r', '12b015bd4a7d9022140aac3c6a3e5e027000edcc', 'euc']]);
+});
+
+await t('no private key material anywhere in generated outputs', () => {
+  for (const f of ['napplet/dist/flock-map.nip5a.unsigned.json', 'napplet/dist/flock-map.nip34.unsigned.json', 'index.html', 'napplet/index.html'])
+    assert.doesNotMatch(read(f), /nsec1[02-9ac-hj-np-z]{20,}|BEGIN [A-Z ]*PRIVATE KEY/);
 });
 
 console.log(`${passed} passed`);

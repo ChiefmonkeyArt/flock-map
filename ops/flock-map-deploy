@@ -2,61 +2,55 @@
 # flock-map-deploy — forced-command entrypoint for the flock-map deploy key.
 #
 # sshd runs this script AS `ubuntu` whenever the restricted deploy key
-# connects; the key grants NO shell and no pty. The script:
-#   1. reads a gzipped tarball of the static app on stdin,
-#   2. validates the contents against a strict whitelist
-#      (index.html, cams.js, manifest.json — nothing else),
-#   3. hands the payload to the pinned root installer via a
-#      fixed-path sudoers rule.
+# connects; the key grants NO shell, no pty and no forwarding. The script:
+#   1. reads a gzipped tarball of the static app on stdin (size-capped),
+#   2. validates it against a strict whitelist — regular files only, exactly
+#      index.html, cams.js, manifest.json and VERSION, no links, no paths,
+#      no duplicates, bounded unpacked size,
+#   3. hands it to the pinned root installer via one fixed-path sudoers rule.
 #
-# Nothing else is possible through this key.
+# Installed by ops/bootstrap-vps.sh from this exact file. Nothing else is
+# possible through this key.
 set -euo pipefail
+umask 077
 
 STAGE_DIR="/var/lib/flock-map-deploy"
 STAGE="${STAGE_DIR}/incoming.tar.gz"
-ALLOWED="index.html cams.js manifest.json"
+MAX_PAYLOAD_BYTES=$((16 * 1024 * 1024))
+
+# --- BEGIN validate_payload (keep identical in flock-map-deploy and flock-map-install-root) ---
+MAX_UNPACKED_BYTES=$((32 * 1024 * 1024))
+validate_payload() {
+  local tb="$1" listing line perms size name extra total=0 seen=" " f
+  listing="$(LC_ALL=C tar --numeric-owner -tvzf "$tb" 2>/dev/null)" || { echo "error: payload is not a valid gzip tarball" >&2; return 1; }
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    # GNU tar -tv: <perms> <uid/gid> <size> <date> <time> <name>
+    read -r perms _ size _ _ name extra <<<"$line"
+    [[ -z "${extra:-}" ]] || { echo "error: unexpected entry: '$line'" >&2; return 1; }
+    [[ "${perms:0:1}" == "-" ]] || { echo "error: '$name' is not a regular file" >&2; return 1; }
+    case "$name" in index.html|cams.js|manifest.json|VERSION) ;; *) echo "error: unexpected entry '$name'" >&2; return 1;; esac
+    [[ "$seen" != *" $name "* ]] || { echo "error: duplicate entry '$name'" >&2; return 1; }
+    seen+="$name "
+    [[ "$size" =~ ^[0-9]+$ ]] || { echo "error: bad size for '$name'" >&2; return 1; }
+    total=$((total + size))
+  done <<<"$listing"
+  (( total <= MAX_UNPACKED_BYTES )) || { echo "error: payload too large ($total bytes)" >&2; return 1; }
+  for f in index.html cams.js manifest.json VERSION; do
+    [[ "$seen" == *" $f "* ]] || { echo "error: required file '$f' missing" >&2; return 1; }
+  done
+}
+# --- END validate_payload ---
 
 mkdir -p "$STAGE_DIR"
-
-# Read the payload in a single pass; refuse empty input.
-if ! cat > "$STAGE"; then
-  echo "error: failed to read payload" >&2
-  rm -f "$STAGE"
-  exit 1
+# Read at most MAX+1 bytes so an oversized stream is detected, not truncated.
+if ! head -c $((MAX_PAYLOAD_BYTES + 1)) > "$STAGE"; then
+  echo "error: failed to read payload" >&2; rm -f "$STAGE"; exit 1
 fi
 size="$(stat -c%s "$STAGE" 2>/dev/null || echo 0)"
-if [[ "$size" == "0" ]]; then
-  echo "error: empty payload" >&2
-  rm -f "$STAGE"
-  exit 1
-fi
+if [[ "$size" == "0" ]]; then echo "error: empty payload" >&2; rm -f "$STAGE"; exit 1; fi
+if (( size > MAX_PAYLOAD_BYTES )); then echo "error: payload exceeds ${MAX_PAYLOAD_BYTES} bytes" >&2; rm -f "$STAGE"; exit 1; fi
+validate_payload "$STAGE" || { rm -f "$STAGE"; exit 1; }
 
-# Strict whitelist: every entry must be one of the three app files, verbatim
-# (no paths, no directories, no symlinks, no absolute paths).
-listing="$(tar -tzf "$STAGE" 2>/dev/null)" || {
-  echo "error: payload is not a valid gzip tarball" >&2
-  rm -f "$STAGE"
-  exit 1
-}
-for f in $listing; do
-  case "$f" in
-    index.html|cams.js|manifest.json) ;;
-    *)
-      echo "error: unexpected entry in payload: '$f'" >&2
-      rm -f "$STAGE"
-      exit 1
-      ;;
-  esac
-done
-for f in $ALLOWED; do
-  if ! grep -qxF "$f" <<<"$listing"; then
-    echo "error: required file '$f' missing from payload" >&2
-    rm -f "$STAGE"
-    exit 1
-  fi
-done
-
-# Hand off to the pinned root installer. The sudoers rule permits ONLY this
-# exact command and this exact path — the dispatcher is not writable by
-# `ubuntu`, so the delivered behavior is fixed.
+# The sudoers rule permits ONLY this exact root-owned path.
 exec sudo -n /usr/local/sbin/flock-map-install-root "$STAGE"

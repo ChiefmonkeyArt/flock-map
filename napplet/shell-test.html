@@ -3,67 +3,50 @@
 <head>
   <meta charset="utf-8" />
   <title>Flock Map napplet — reference shell</title>
+  <link rel="icon" href="data:," />
   <style>
     html, body { height: 100%; margin: 0; background: #000; }
     #frame { width: 100%; height: 100%; border: 0; display: block; }
+    pre { color: #e11d5c; padding: 16px; white-space: pre-wrap; }
   </style>
 </head>
 <body>
-  <iframe id="frame" sandbox="allow-scripts"></iframe>
-  <script id="shell">
-    // Reference NIP-5D shell (test harness only). Mirrors the production mount:
-    // resolve path tags -> blobs, re-hash the data files vs the aggregate, then
-    // inline EVERYTHING into one srcdoc (opaque origin cannot cross-fetch).
+  <iframe id="frame" sandbox="allow-scripts" title="Flock Map napplet"></iframe>
+  <script>
+    // Reference NIP-5D shell (dev harness only — not part of the bundle).
+    // Mirrors a production mount of a single-file napplet:
+    //   1. read the kind 35129 manifest (here: the unsigned build output),
+    //   2. fetch each `path` blob and re-hash it against its tag,
+    //   3. recompute the aggregate `x` and compare,
+    //   4. write the verified bytes into an opaque-origin sandboxed srcdoc.
+    // The napplet carries its whole dataset inline, so no inlining, base href
+    // or cross-origin fetch is needed.
     (async function () {
-      const s = { open: "<scr" + "ipt>", close: "</scr" + "ipt>", openTag: function (src) { return "<scr" + "ipt src=\"" + src + "\"></scr" + "ipt>"; } };
-      const frame = document.getElementById("frame");
-      const fail = (m) => { document.body.innerHTML = "<pre style='color:#e11d5c;padding:16px'>" + m + "</pre>"; };
+      var frame = document.getElementById('frame');
+      function fail(m) { var p = document.createElement('pre'); p.textContent = m; document.body.replaceChildren(p); }
       async function sha256hex(buf) {
-        const d = await crypto.subtle.digest("SHA-256", buf);
-        return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, "0")).join("");
+        var d = new Uint8Array(await crypto.subtle.digest('SHA-256', buf));
+        return Array.from(d, function (b) { return b.toString(16).padStart(2, '0'); }).join('');
       }
-      const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
-      const txt = async (p) => (await fetch(p)).text();
-
-      const [indexSrc, camsSrc, manifestSrc, lc, mc, mcd, leafletJs, mcJs] = await Promise.all([
-        txt("index.html"), txt("cams.js"), txt("manifest.json"),
-        txt("vendor/leaflet.css"), txt("vendor/MarkerCluster.css"),
-        txt("vendor/MarkerCluster.Default.css"),
-        txt("vendor/leaflet.js"), txt("vendor/leaflet.markercluster.js"),
-      ]);
-
-      // verify the two data files against the signed aggregate
-      const expect = {
-        "/cams.js": "ef960c3303c326c92fefe4c0145f29083c2e629bbdaa3f5f89b57e419a499f36",
-        "/manifest.json": "103e77859a34dd6a655bb15693c2e27867260c5380b88a956d0aa83e418d8342",
-      };
-      const camsSha = await sha256hex(new TextEncoder().encode(camsSrc));
-      const manifestSha = await sha256hex(new TextEncoder().encode(manifestSrc));
-      if (camsSha !== expect["/cams.js"]) return fail("/cams.js hash mismatch: " + camsSha);
-      if (manifestSha !== expect["/manifest.json"]) return fail("/manifest.json hash mismatch: " + manifestSha);
-
-      // extract the map logic from index.html (its final inline script) without
-      // typing the closing tag literally in this JS
-      const endTag = "</scr" + "ipt>";
-      const lastScript = indexSrc.lastIndexOf("<scr" + "ipt>");
-      const endClose = indexSrc.lastIndexOf(endTag);
-      const mapScript = indexSrc.slice(lastScript + 8, endClose);
-
-      // build the srcdoc from scratch (no literal closing-tag sequence in this JS)
-      const doc =
-        "<!DOCTYPE html><html><head><meta charset='utf-8'/>" +
-        "<base href='" + location.href.replace(/[^/]*$/, "") + "'>" +
-        "<style>" + lc + "\n" + mc + "\n" + mcd + "\n</style>" +
-        "</head><body><div id='map'></div><div id='status'>loading…</div>" +
-        s.openTag("data:text/javascript;base64," + b64(leafletJs)) +
-        s.openTag("data:text/javascript;base64," + b64(mcJs)) +
-        s.open + "window.__FLOCK_MANIFEST__ = " + manifestSrc + ";</scr" + "ipt>" +
-        s.open + camsSrc + "</scr" + "ipt>" +
-        s.open + mapScript + "</scr" + "ipt>" +
-        "</body></html>";
-
-      frame.srcdoc = doc;
-    })().catch(e => { document.body.innerHTML = "<pre style='color:#e11d5c;padding:16px'>shell error: " + e.stack + "</pre>"; });
+      var ev = await (await fetch('dist/flock-map.nip5a.unsigned.json')).json();
+      if (ev.kind !== 35129) return fail('not a kind 35129 manifest');
+      var paths = ev.tags.filter(function (t) { return t[0] === 'path'; });
+      var agg = ev.tags.find(function (t) { return t[0] === 'x' && t[2] === 'aggregate'; });
+      if (!agg) return fail('manifest has no aggregate x tag');
+      var blobs = {};
+      for (var i = 0; i < paths.length; i++) {
+        var buf = await (await fetch(paths[i][1].replace(/^\//, ''))).arrayBuffer();
+        var h = await sha256hex(buf);
+        if (h !== paths[i][2]) return fail(paths[i][1] + ' hash mismatch: ' + h);
+        blobs[paths[i][1]] = buf;
+      }
+      var lines = paths.map(function (t) { return t[2] + ' ' + t[1] + '\n'; }).sort().join('');
+      var a = await sha256hex(new TextEncoder().encode(lines));
+      if (a !== agg[1]) return fail('aggregate mismatch: ' + a);
+      if (!blobs['/index.html']) return fail('bundle has no /index.html');
+      frame.srcdoc = new TextDecoder().decode(blobs['/index.html']);
+      window.__shell = { verified: true, aggregate: a };
+    })().catch(function (e) { document.body.textContent = 'shell error: ' + e.message; });
   </script>
 </body>
 </html>

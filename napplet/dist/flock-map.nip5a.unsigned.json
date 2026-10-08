@@ -17,11 +17,11 @@
     ],
     [
       "description",
-      "Self-hosted surveillance (Flock Safety / ALPR) camera map; standalone display napplet, no shell capabilities required."
+      "Self-hosted surveillance (Flock Safety / ALPR) camera map; standalone single-file display napplet, no shell capabilities required."
     ],
     [
       "x",
-      "1717c8750a2d7d31055f2543c2c497df0b7dc2e6c5ff6c41fc8cf97a746ccce3",
+      "393bb500fca6047f7f9fe312fe8386e27da1c420cbbc897a65d9c7be582b50f8",
       "aggregate"
     ],
     [
@@ -38,69 +38,9 @@
     ],
     [
       "path",
-      "/cams.js",
-      "ef960c3303c326c92fefe4c0145f29083c2e629bbdaa3f5f89b57e419a499f36"
-    ],
-    [
-      "path",
       "/index.html",
-      "855f6837e33b03502656e4bf621135bad10fd79c1d940df13f0e3a6183cb0c43"
-    ],
-    [
-      "path",
-      "/manifest.json",
-      "103e77859a34dd6a655bb15693c2e27867260c5380b88a956d0aa83e418d8342"
-    ],
-    [
-      "path",
-      "/vendor/MarkerCluster.Default.css",
-      "61258232d98d64dc2a7b1e02130d67421bc5b9bda5994eef70228ff97570c170"
-    ],
-    [
-      "path",
-      "/vendor/MarkerCluster.css",
-      "614dea0a98ff3f4ead74f04918f6b1d1b9ba435c25b5fc23b21a394d1e3e4d87"
-    ],
-    [
-      "path",
-      "/vendor/images/layers-2x.png",
-      "066daca850d8ffbef007af00b06eac0015728dee279c51f3cb6c716df7c42edf"
-    ],
-    [
-      "path",
-      "/vendor/images/layers.png",
-      "1dbbe9d028e292f36fcba8f8b3a28d5e8932754fc2215b9ac69e4cdecf5107c6"
-    ],
-    [
-      "path",
-      "/vendor/images/marker-icon-2x.png",
-      "00179c4c1ee830d3a108412ae0d294f55776cfeb085c60129a39aa6fc4ae2528"
-    ],
-    [
-      "path",
-      "/vendor/images/marker-icon.png",
-      "574c3a5cca85f4114085b6841596d62f00d7c892c7b03f28cbfa301deb1dc437"
-    ],
-    [
-      "path",
-      "/vendor/images/marker-shadow.png",
-      "264f5c640339f042dd729062cfc04c17f8ea0f29882b538e3848ed8f10edb4da"
-    ],
-    [
-      "path",
-      "/vendor/leaflet.css",
-      "a7837102824184820dfa198d1ebcd109ff6d0ff9a2672a074b9a1b4d147d04c6"
-    ],
-    [
-      "path",
-      "/vendor/leaflet.js",
-      "db49d009c841f5ca34a888c96511ae936fd9f5533e90d8b2c4d57596f4e5641a"
-    ],
-    [
-      "path",
-      "/vendor/leaflet.markercluster.js",
-      "1e4e1d22972a3926f48598e0caf14e3fe7049835d428a344fed4f9e3665b3508"
+      "2ed4572a94d06268967cf9721c3cff29267913f414d729d3a964704be00e42b9"
     ]
   ],
-  "content": "Flock Map napplet — NIP-5A content-addressed bundle (see path tags)."
+  "content": "Flock Map napplet v1.2.0 — NIP-5A content-addressed single-file bundle (see path tags)."
 }
