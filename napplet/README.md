@@ -13,8 +13,9 @@ the NIP-5A manifest, load the Blossom blobs, and write the verified HTML into
 ## Layout
 
 - `index.html` — the napplet entry (self-contained map)
-- `cams.js`, `manifest.json` — the camera dataset + tile manifest (same
-  content as the web app; kept in sync from the repo root)
+- `cams.js`, `manifest.json` — the camera dataset + tile manifest. This
+  `cams.js` is the raw source of truth; the web app's root `cams.js` is a
+  packed build of it (`tools/build.mjs`), so the two files now differ by design
 - `vendor/` — Leaflet 1.9.4 + leaflet.markercluster 1.5.3, fully vendored
 - `build-manifest.mjs` — reproducible hash/path-tag/aggregate builder
 
