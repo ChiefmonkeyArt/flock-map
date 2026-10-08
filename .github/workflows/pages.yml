@@ -1,0 +1,45 @@
+name: Signing page (GitHub Pages)
+
+# Publishes ONLY the manual-signing helper (sign/index.html) plus the napplet
+# and its unsigned events, so the page runs top-level where a NIP-07 signer
+# extension can answer it. No keys, no secrets: signing happens in the
+# operator's browser extension.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Assemble site
+        run: |
+          set -euo pipefail
+          mkdir -p _site/napplet/dist
+          cp sign/index.html _site/index.html
+          cp napplet/index.html _site/napplet/index.html
+          cp napplet/dist/flock-map.nip5a.unsigned.json napplet/dist/flock-map.nip34.unsigned.json _site/napplet/dist/
+          touch _site/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

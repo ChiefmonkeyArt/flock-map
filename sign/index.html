@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flock Map — sign and publish</title>
+<style>
+body{margin:0;background:#0b0b10;color:#eee;font:16px/1.5 system-ui,sans-serif}
+main{max-width:640px;margin:0 auto;padding:40px 20px}
+h1{font-size:24px;margin:0 0 8px}p{color:#bbb}
+button{background:#e11d5c;color:#fff;border:0;border-radius:8px;padding:14px 22px;font-size:17px;font-weight:600;cursor:pointer;width:100%;margin:16px 0}
+button:disabled{background:#444;cursor:default}
+ol{padding-left:20px}li{margin:10px 0}
+.s{display:inline-block;width:22px}.ok{color:#4ade80}.bad{color:#f87171}.wait{color:#aaa}
+code{font-size:13px;color:#ddd;white-space:pre-wrap;word-break:break-all}
+#done{display:none;background:#14321f;border:1px solid #2f7a49;border-radius:8px;padding:14px;margin-top:16px}
+</style></head><body><main>
+<h1>Flock Map: sign and publish</h1>
+<p>Open this page in <b>Brave</b>, then press the button. Your <b>Plebeian Signer</b> will ask you to approve 3 signatures. Approve each one (choosing "once" is fine). Nothing else is needed.</p>
+<button id="go">Sign and publish</button>
+<ol>
+<li><span class="s" id="s0">•</span>Check your signer is the right npub</li>
+<li><span class="s" id="s1">•</span>Upload the napplet file to Blossom (signature 1)</li>
+<li><span class="s" id="s2">•</span>Sign and publish the napplet listing (signature 2)</li>
+<li><span class="s" id="s3">•</span>Sign and publish the repo announcement (signature 3)</li>
+</ol>
+<div id="done">All done. You can close this page.</div>
+<p id="logwrap"><code id="log"></code></p>
+<script>
+const PUBKEY="ec79b568bdea63ca6091f5b84b0c639c10a0919e175fa09a4de3154f82906f25";
+const RELAY="wss://chiefmonkey.art/relay", BLOSSOM="https://blossom.primal.net";
+const $=id=>document.getElementById(id), log=m=>{$("log").textContent+=m+"\n";};
+const mark=(i,c,t)=>{$("s"+i).className="s "+c;$("s"+i).textContent=t;};
+const hex=b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");
+const now=()=>Math.floor(Date.now()/1000);
+function within(p,ms,what){return Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error(what+" — no answer from your signer after "+(ms/1000)+"s. Look for a signer popup, approve it, then press Try again.")),ms))]);}
+async function sign(ev){const s=await within(window.nostr.signEvent(ev),120000,"Signing kind "+ev.kind);if(!s||s.pubkey!==PUBKEY)throw new Error("signed by the wrong key");return s;}
+function publish(ev){return new Promise((res,rej)=>{const ws=new WebSocket(RELAY);const t=setTimeout(()=>{ws.close();rej(new Error("relay timeout"));},15000);
+ ws.onopen=()=>ws.send(JSON.stringify(["EVENT",ev]));
+ ws.onmessage=m=>{const d=JSON.parse(m.data);if(d[0]==="OK"&&d[1]===ev.id){clearTimeout(t);ws.close();d[2]?res():rej(new Error("relay rejected: "+d[3]));}};
+ ws.onerror=()=>{clearTimeout(t);rej(new Error("could not reach relay"));};});}
+$("go").onclick=async()=>{
+ $("go").disabled=true;let step=0;
+ try{
+  if(!window.nostr)throw new Error("Plebeian Signer not found. Open this page in Brave with the extension enabled.");
+  const pk=await within(window.nostr.getPublicKey(),120000,"Reading your npub");
+  if(pk!==PUBKEY)throw new Error("Your signer is using a different key ("+pk.slice(0,12)+"…). Switch to npub1a3um… and try again.");
+  mark(0,"ok","✓");step=1;mark(1,"wait","…");
+  const get=async u=>{const r=await fetch(u,{cache:"no-store"});if(!r.ok)throw new Error("could not load "+u);return r;};
+  const EVENTS=[await (await get("napplet/dist/flock-map.nip5a.unsigned.json")).json(),await (await get("napplet/dist/flock-map.nip34.unsigned.json")).json()];
+  const pathTag=EVENTS[0].tags.find(t=>t[0]==="path"&&t[1]==="/index.html");
+  const blob=await (await get("napplet/index.html")).arrayBuffer();
+  const sha=hex(await crypto.subtle.digest("SHA-256",blob));
+  if(!pathTag||sha!==pathTag[2])throw new Error("napplet file does not match the listing hash");
+  const auth=await sign({kind:24242,created_at:now(),content:"Upload Flock Map napplet",tags:[["t","upload"],["x",sha],["expiration",String(now()+600)]]});
+  let up;
+  try{up=await fetch(BLOSSOM+"/upload",{method:"PUT",body:blob,headers:{"Authorization":"Nostr "+btoa(JSON.stringify(auth)),"Content-Type":"text/html"}});}
+  catch(_){throw new Error("Blossom refused the upload (it does not say why). Press Try again; if it repeats, tell Computer.");}
+  if(!up.ok)throw new Error("Blossom upload failed ("+up.status+") "+(up.headers.get("x-reason")||""));
+  log("napplet: "+BLOSSOM+"/"+sha);mark(1,"ok","✓");
+  for(const [i,ev] of [[2,EVENTS[0]],[3,EVENTS[1]]]){
+   step=i;mark(i,"wait","…");
+   const {id,sig,...base}=ev;const s=await sign({...base,created_at:now()});
+   await publish(s);log("kind "+s.kind+" id "+s.id);mark(i,"ok","✓");
+  }
+  $("done").style.display="block";
+ }catch(e){mark(step,"bad","✗");log("Problem: "+(e&&e.message||e));$("go").disabled=false;$("go").textContent="Try again";}
+};
+</script></main></body></html>

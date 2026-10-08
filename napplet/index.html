@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=' 'sha256-zCrXkaM7XT+ftUtw4nbqzcHl8+HhttqoUOE6fTNqOXo=' 'sha256-akGAXTQAMFywlrTdeu00K2n7QKZoggH6po4+V55RSIw='; style-src 'unsafe-inline'; img-src https://server.arcgisonline.com data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=' 'sha256-zCrXkaM7XT+ftUtw4nbqzcHl8+HhttqoUOE6fTNqOXo=' 'sha256-c+X7RvlUU7Se+/My84Qf/gDT7IuH/34g9ZsIN2I6yis='; style-src 'unsafe-inline'; img-src https://server.arcgisonline.com data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
   <meta name="referrer" content="no-referrer" />
   <title>Flock Surveillance Map</title>
   <link rel="preconnect" href="https://server.arcgisonline.com" />
@@ -698,7 +698,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
   <script>
 (function () {
   'use strict';
-  var VERSION = '1.2.0', CAMS_SRC = 'cams.js?v=154e33d69920909c', MODE = 'napplet';
+  var VERSION = '1.2.1', CAMS_SRC = 'cams.js?v=154e33d69920909c', MODE = 'napplet';
   var CLUSTER_OFF_ZOOM = 12, CELLS_MAX_ZOOM = 11, GRID = 64, PAD = 0.25, MAX_CANVAS_PX = 16e6, POPUP_MAX = 8;
   var t0 = performance.now();
   var msg = document.getElementById('msg'), gridBox = document.getElementById('grid');
