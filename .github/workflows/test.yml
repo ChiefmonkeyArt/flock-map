@@ -20,4 +20,4 @@ jobs:
         with:
           node-version: 20
       - name: Build is fresh and bundle round-trips losslessly
-        run: node tools/test.mjs
+        run: node tools/test.mjs && bash tools/test-ops.sh

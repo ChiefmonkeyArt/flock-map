@@ -35,8 +35,20 @@ jobs:
         with:
           node-version: 20
 
-      - name: Verify bundle (fresh build, lossless round-trip, CSP)
-        run: node tools/test.mjs
+      - name: Verify bundle (fresh build, lossless round-trip, CSP, ops)
+        run: node tools/test.mjs && bash tools/test-ops.sh
+
+      - name: Require release tag == VERSION
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          v="$(tr -d '[:space:]' < VERSION)"
+          if [[ "$REF_TYPE" != "tag" || "$REF_NAME" != "v$v" ]]; then
+            echo "::error::deploy must run from tag v$v (got $REF_TYPE '$REF_NAME'): gh workflow run deploy-flock-map.yml --ref v$v"
+            exit 1
+          fi
 
       - name: Install SSH key (host-key verified)
         env:
@@ -73,7 +85,7 @@ jobs:
           SSH_HOST: ${{ secrets.VPS_DEPLOY_HOST }}
         run: |
           set -euo pipefail
-          tar -czf flock-release.tar.gz index.html cams.js manifest.json
+          tar -czf flock-release.tar.gz index.html cams.js manifest.json VERSION
           # The restricted key triggers /usr/local/bin/flock-map-deploy
           # server-side; the tarball is delivered to it on stdin.
           cat flock-release.tar.gz \
@@ -88,14 +100,15 @@ jobs:
           host_only="${SSH_HOST#*@}"
           for i in $(seq 1 8); do
             code=$(curl -s -o /dev/null -w '%{http_code}' "https://${host_only}/flock-map/")
-            echo "poll $i: http=$code"
-            if [ "$code" = "200" ]; then
-              echo "flock-map is live"
+            live="$(curl -s "https://${host_only}/flock-map/VERSION" | tr -d '[:space:]')"
+            echo "poll $i: http=$code version=${live:-?}"
+            if [ "$code" = "200" ] && [ "$live" = "$(tr -d '[:space:]' < VERSION)" ]; then
+              echo "flock-map v$live is live"
               exit 0
             fi
             sleep 5
           done
-          echo "::error::flock-map not serving 200 after retries"
+          echo "::error::flock-map not serving v$(cat VERSION) after retries"
           exit 1
 
       - name: Clean up SSH key

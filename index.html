@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=' 'sha256-FXsTpWAqUDfycLusq44RxjUyCEIEJ4uNT1Q1Dqmf6Iw='; style-src 'unsafe-inline'; img-src https://server.arcgisonline.com data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=' 'sha256-taYFGu9VOw9rvVTaK29dU2KjPKKoXQ9BGkp6rg6Sc+g='; style-src 'unsafe-inline'; img-src https://server.arcgisonline.com data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
   <meta name="referrer" content="no-referrer" />
   <title>Flock Surveillance Map</title>
   <link rel="preconnect" href="https://server.arcgisonline.com" />
-  <link rel="preload" href="cams.js?v=a05e6b801f1a4a3f" as="script" />
+  <link rel="preload" href="cams.js?v=154e33d69920909c" as="script" />
   <style>/* required styles */
 
 .leaflet-pane,
@@ -698,7 +698,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
   <script>
 (function () {
   'use strict';
-  var VERSION = '1.1.0', CAMS_SRC = 'cams.js?v=a05e6b801f1a4a3f';
+  var VERSION = '1.2.0', CAMS_SRC = 'cams.js?v=154e33d69920909c', MODE = 'web';
   var CLUSTER_OFF_ZOOM = 12, CELLS_MAX_ZOOM = 11, GRID = 64, PAD = 0.25, MAX_CANVAS_PX = 16e6, POPUP_MAX = 8;
   var t0 = performance.now();
   var msg = document.getElementById('msg'), gridBox = document.getElementById('grid');
@@ -962,17 +962,21 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
     var ms = Math.round(performance.now() - t0);
     msg.textContent = N.toLocaleString() + ' cameras · ' + NC.toLocaleString() + ' cells · ' + ms + 'ms · v' + VERSION;
-    window.__flock = { ready: true, n: N, cells: NC, ms: ms, version: VERSION, map: map };
+    window.__flock = { ready: true, n: N, cells: NC, ms: ms, version: VERSION, mode: MODE, map: map };
   }
 
   if (typeof DecompressionStream === 'undefined') { fail(new Error('this browser is too old (no DecompressionStream)')); return; }
+  function boot() {
+    var packed = window.FLOCK_PACK; window.FLOCK_PACK = null;
+    if (typeof packed !== 'string') { fail(new Error('no packed dataset')); return; }
+    inflateRaw(b64ToBytes(packed)).then(decodePack).then(start).catch(fail);
+  }
+  // Napplet build: the dataset is inlined above (single verified srcdoc blob).
+  // Web build: fetch the content-hashed cams.js (preloaded in <head>).
+  if (typeof window.FLOCK_PACK === 'string') { boot(); return; }
   var s = document.createElement('script');
   s.src = CAMS_SRC;
-  s.onload = function () {
-    var packed = window.FLOCK_PACK; window.FLOCK_PACK = null;
-    if (typeof packed !== 'string') { fail(new Error('cams.js: no packed dataset')); return; }
-    inflateRaw(b64ToBytes(packed)).then(decodePack).then(start).catch(fail);
-  };
+  s.onload = boot;
   s.onerror = function () { fail(new Error('cams.js failed to load')); };
   document.head.appendChild(s);
 })();

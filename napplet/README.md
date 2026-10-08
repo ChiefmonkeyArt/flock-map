@@ -1,53 +1,58 @@
 # Flock Map — Nostr Napplet
 
-A standalone, self-contained display napplet for the Flock Safety / ALPR camera
-map. It ships the entire bundle (Leaflet + marker-cluster, vendored — **no CDN
-at runtime**) and renders the camera dataset from `manifest.json` + `cams.js`.
+A standalone, **single-file** display napplet for the Flock Safety / ALPR
+camera map. `napplet/index.html` contains everything: Leaflet 1.9.4, the fast
+single-canvas renderer shared with the web app, and the full 178,674-camera
+dataset packed losslessly (~1.6 MB total). No CDN, no sibling files, no
+`window.napplet.*` calls and no `requires` capabilities.
 
-It is **not** part of Torii Quest or Continuum: this is an independent app that
-any NIP-5D shell can mount as a `srcdoc` iframe. It declares no `requires`
-capabilities and uses no `window.napplet.*` API — a shell needs only to verify
-the NIP-5A manifest, load the Blossom blobs, and write the verified HTML into
-`sandbox="allow-scripts"`.
+It is **not** part of Torii Quest or Continuum: any NIP-5D shell can mount it.
+Because the bundle is one blob, the shell only has to verify one hash and write
+the bytes into a `sandbox="allow-scripts"` srcdoc — no inlining or base-href
+tricks, and nothing for an opaque-origin frame to fetch except basemap tiles.
 
 ## Layout
 
-- `index.html` — the napplet entry (self-contained map)
-- `cams.js`, `manifest.json` — the camera dataset + tile manifest. This
-  `cams.js` is the raw source of truth; the web app's root `cams.js` is a
-  packed build of it (`tools/build.mjs`), so the two files now differ by design
-- `vendor/` — Leaflet 1.9.4 + leaflet.markercluster 1.5.3, fully vendored
-- `build-manifest.mjs` — reproducible hash/path-tag/aggregate builder
+- `index.html` — **generated** napplet (the only file in the bundle)
+- `dist/flock-map.nip5a.unsigned.json` — **generated** kind 35129 manifest
+- `dist/flock-map.nip34.unsigned.json` — **generated** kind 30617 repo announcement
+- `shell-test.html` — reference shell (dev harness; not in the bundle)
+- `build-manifest.mjs` — compatibility wrapper for `node tools/build.mjs`
 
 ## Build (emits unsigned events — it never signs)
 
 ```sh
-node napplet/build-manifest.mjs
+node tools/build.mjs          # or: node napplet/build-manifest.mjs
+node tools/test.mjs           # proves path hash + aggregate match the bytes
 ```
 
-Produces, under `napplet/dist/`:
+The bundle is an explicit file list (`NAPPLET_FILES = ['/index.html']` in
+`tools/build.mjs`), not a directory walk, so dev files can never change the
+aggregate. The build is deterministic and CI fails if `dist/` is stale, so the
+events you sign always match the committed napplet byte-for-byte.
 
-- `flock-map.nip5a.unsigned.json` — kind **35129** named-napplet manifest
-  (`d`, `type`, `name`, `description`, `x` aggregate, `path` tags per file,
-  `web`, `source`, `relays`)
-- `flock-map.nip34.unsigned.json` — kind **30617** repo announcement
+Both events are complete except `id`/`sig`, with `created_at: 0` for your
+signer to set. **No private key ever touches this repo.**
 
-Both are complete except `id`/`sig` (and `created_at` is `0`). The operator
-signs with their own tool and publishes — **no private key ever touches this
-repo.**
+## Signing and publishing
+
+1. Sign both JSON files under `npub1a3um269aaf3u5cy37kuykrrrnsg2pyv7za06pxjduv25lq5sdujs2qmdj6`
+   with your own signer (it sets `created_at`, `id`, `sig`).
+2. Upload `napplet/index.html` to your Blossom server(s); its sha256 is the
+   `path` tag hash.
+3. Publish both signed events to `wss://chiefmonkey.art/relay`.
 
 ## Trust model
 
-- Identity is the `(dTag, aggregateHash)` pair (`flock-map` +
-  `x` aggregate), which the shell binds to the iframe `contentWindow`.
-- Only `path` tags participate in the aggregate hash (NIP-5A rule);
-  other tags are ignored for equality.
-- Blossom servers advertise where the blobs live (`server` tag / Blossom list);
-  the shell downloads and re-hashes each blob before mounting.
+- Identity is the `(d, aggregate x)` pair (`flock-map` + aggregate), which the
+  shell binds to the iframe `contentWindow`.
+- Only `path` tags participate in the aggregate (sorted `"<sha> <path>\n"`
+  lines, sha256) — the NIP-5A rule.
+- The shell downloads and re-hashes each blob before mounting
+  (`shell-test.html` demonstrates exactly this).
 
 ## Basemap note
 
-Raster tiles still come from Esri ArcGIS (keyless) because the map needs a
-geographic backdrop; this is the same keyless basemap the web app uses. Notably
-the tile endpoint is not part of the content-addressed bundle — swap it in
-`index.html` if you stand up a self-hosted tile server.
+Raster tiles still come from Esri ArcGIS (keyless) at runtime; the CSP allows
+images from that one origin only. Swap the URL in `web/index.src.html` and
+rebuild if you stand up a self-hosted tile server.

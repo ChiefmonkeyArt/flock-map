@@ -35,76 +35,24 @@ AUTHKEY="${DEPLOY_HOME}/.ssh/authorized_keys"
 
 echo "==> deploy user: $DEPLOY_USER (home $DEPLOY_HOME)"
 
-# --- 1. Write the forced-command dispatcher (root-owned, not ubuntu-writable)
+# --- 1+2. Install the dispatcher and pinned root installer FROM THE REPO FILES
+# (ops/flock-map-deploy, ops/flock-map-install-root). The caller prepends
+#   FLOCK_DISPATCHER_B64=<base64>  FLOCK_INSTALLER_B64=<base64>
+# to this script on stdin, so what runs on the VPS is byte-for-byte the
+# reviewed file at the deployed tag — no second hand-maintained copy here.
+install_pinned() { # <b64> <dest>
+  local b64="$1" dest="$2" tmp
+  [[ -n "$b64" && "$b64" =~ ^[A-Za-z0-9+/=]+$ ]] || { echo "error: missing/invalid payload for $dest" >&2; exit 1; }
+  tmp="$(mktemp "${dest}.XXXXXX")"
+  printf '%s' "$b64" | base64 -d > "$tmp"
+  bash -n "$tmp" || { rm -f "$tmp"; echo "error: $dest failed syntax check" >&2; exit 1; }
+  chown root:root "$tmp"; chmod 0755 "$tmp"; mv -f "$tmp" "$dest"
+  echo "==> installed $dest sha256=$(sha256sum "$dest" | cut -d' ' -f1)"
+}
 install -d -m 0755 /usr/local/bin /usr/local/sbin
-cat > "$BIN" <<'SCRIPT'
-#!/usr/bin/env bash
-# flock-map-deploy — forced-command entrypoint for the flock-map deploy key.
-# Runs AS `ubuntu`. Reads a gzipped tarball on stdin, validates a strict
-# whitelist, then hands off to the pinned root installer via fixed sudoers.
-set -euo pipefail
-STAGE_DIR="/var/lib/flock-map-deploy"
-STAGE="${STAGE_DIR}/incoming.tar.gz"
-mkdir -p "$STAGE_DIR"
-if ! cat > "$STAGE"; then echo "error: failed to read payload" >&2; rm -f "$STAGE"; exit 1; fi
-size="$(stat -c%s "$STAGE" || echo 0)"
-[[ "$size" != "0" ]] || { echo "error: empty payload" >&2; rm -f "$STAGE"; exit 1; }
-listing="$(tar -tzf "$STAGE" 2>/dev/null)" || { echo "error: not a valid gzip tarball" >&2; rm -f "$STAGE"; exit 1; }
-for f in $listing; do
-  case "$f" in
-    index.html|cams.js|manifest.json) ;;
-    *) echo "error: unexpected entry '$f'" >&2; rm -f "$STAGE"; exit 1;;
-  esac
-done
-for f in index.html cams.js manifest.json; do
-  grep -qxF "$f" <<<"$listing" || { echo "error: missing required file '$f'" >&2; rm -f "$STAGE"; exit 1; }
-done
-exec sudo -n /usr/local/sbin/flock-map-install-root "$STAGE"
-SCRIPT
-chown root:root "$BIN"; chmod 0755 "$BIN"
-
-# --- 2. Write the pinned root installer (root-owned, NOT ubuntu-writable)
-cat > "$ROOT_INSTALL" <<'SCRIPT'
-#!/usr/bin/env bash
-# flock-map-install-root — pinned root installer (fixed-path sudoers target).
-set -euo pipefail
-[[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
-APP="flock-map"; APPS_ROOT="/apps"
-APP_ROOT="${APPS_ROOT}/${APP}"
-RELEASE_DIR="${APP_ROOT}/releases/$(date +%Y%m%d-%H%M%S)"
-CURRENT_LINK="${APP_ROOT}/current"; DATA_DIR="${APP_ROOT}/data"
-FRAGMENT_FILE="/opt/torii/nginx-fragments/${APP}.conf"
-BUNDLE="$1"
-[[ "$#" -eq 1 && -f "$BUNDLE" ]] || { echo "usage: installer <tarball>" >&2; exit 1; }
-listing="$(tar -tzf "$BUNDLE" 2>/dev/null)" || { echo "invalid tarball" >&2; exit 1; }
-for f in $listing; do
-  case "$f" in index.html|cams.js|manifest.json) ;; *) echo "unexpected '$f'" >&2; exit 1;; esac
-done
-install -d -m 0755 "${RELEASE_DIR}" "${DATA_DIR}"
-tar -xzf "$BUNDLE" -C "${RELEASE_DIR}"
-chown -R root:www-data "${RELEASE_DIR}" "${DATA_DIR}"
-ln -sfn "${RELEASE_DIR}" "${CURRENT_LINK}"
-install -d -m 0755 /opt/torii/nginx-fragments
-cat > "${FRAGMENT_FILE}" <<'NGINX'
-location /flock-map/ {
-    alias /apps/flock-map/current/;
-    expires 1h;
-    add_header Cache-Control "public, max-age=3600";
-}
-location = /flock-map {
-    return 301 /flock-map/;
-}
-location = /flock-map/index.html {
-    alias /apps/flock-map/current/index.html;
-    add_header Cache-Control "no-store" always;
-}
-NGINX
-/usr/local/bin/torii register "${APP}" --display "Flock Map" --desc "Flock Safety / ALPR camera surveillance map" --version "1.0.0"
-/usr/local/bin/torii reload
-rm -f "$BUNDLE"
-echo "flock-map installed"
-SCRIPT
-chown root:root "$ROOT_INSTALL"; chmod 0755 "$ROOT_INSTALL"
+install_pinned "${FLOCK_DISPATCHER_B64:-}" "$BIN"
+install_pinned "${FLOCK_INSTALLER_B64:-}" "$ROOT_INSTALL"
+install -d -m 0700 -o root -g root /var/backups/flock-map
 
 # --- 3. Stage dir owned by the deploy user (dispatcher writes here)
 install -d -m 0755 "$STAGE_DIR"

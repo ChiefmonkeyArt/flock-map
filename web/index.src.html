@@ -7,8 +7,7 @@
   <meta name="referrer" content="no-referrer" />
   <title>Flock Surveillance Map</title>
   <link rel="preconnect" href="https://server.arcgisonline.com" />
-  <link rel="preload" href="cams.js?v={{CAMS_HASH}}" as="script" />
-  <style>{{LEAFLET_CSS}}</style>
+{{PRELOAD}}  <style>{{LEAFLET_CSS}}</style>
   <style>
     html, body { height: 100%; margin: 0; background: #07070b; }
     #map { height: 100%; background: #07070b; }
@@ -29,10 +28,10 @@
   <div id="map"></div>
   <div id="status"><span id="msg">loading map…</span><label><input type="checkbox" id="grid" checked /> cells</label></div>
   <script>{{LEAFLET_JS}}</script>
-  <script>
+{{INLINE_DATA}}  <script>
 (function () {
   'use strict';
-  var VERSION = '{{VERSION}}', CAMS_SRC = 'cams.js?v={{CAMS_HASH}}';
+  var VERSION = '{{VERSION}}', CAMS_SRC = 'cams.js?v={{CAMS_HASH}}', MODE = '{{MODE}}';
   var CLUSTER_OFF_ZOOM = 12, CELLS_MAX_ZOOM = 11, GRID = 64, PAD = 0.25, MAX_CANVAS_PX = 16e6, POPUP_MAX = 8;
   var t0 = performance.now();
   var msg = document.getElementById('msg'), gridBox = document.getElementById('grid');
@@ -296,17 +295,21 @@
 
     var ms = Math.round(performance.now() - t0);
     msg.textContent = N.toLocaleString() + ' cameras · ' + NC.toLocaleString() + ' cells · ' + ms + 'ms · v' + VERSION;
-    window.__flock = { ready: true, n: N, cells: NC, ms: ms, version: VERSION, map: map };
+    window.__flock = { ready: true, n: N, cells: NC, ms: ms, version: VERSION, mode: MODE, map: map };
   }
 
   if (typeof DecompressionStream === 'undefined') { fail(new Error('this browser is too old (no DecompressionStream)')); return; }
+  function boot() {
+    var packed = window.FLOCK_PACK; window.FLOCK_PACK = null;
+    if (typeof packed !== 'string') { fail(new Error('no packed dataset')); return; }
+    inflateRaw(b64ToBytes(packed)).then(decodePack).then(start).catch(fail);
+  }
+  // Napplet build: the dataset is inlined above (single verified srcdoc blob).
+  // Web build: fetch the content-hashed cams.js (preloaded in <head>).
+  if (typeof window.FLOCK_PACK === 'string') { boot(); return; }
   var s = document.createElement('script');
   s.src = CAMS_SRC;
-  s.onload = function () {
-    var packed = window.FLOCK_PACK; window.FLOCK_PACK = null;
-    if (typeof packed !== 'string') { fail(new Error('cams.js: no packed dataset')); return; }
-    inflateRaw(b64ToBytes(packed)).then(decodePack).then(start).catch(fail);
-  };
+  s.onload = boot;
   s.onerror = function () { fail(new Error('cams.js failed to load')); };
   document.head.appendChild(s);
 })();
