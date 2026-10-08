@@ -36,8 +36,8 @@ signer to set. **No private key ever touches this repo.**
 
 ## Signing and publishing
 
-Easiest: open https://chiefmonkeyart.github.io/flock-map/ in Brave with your
-NIP-07 signer and press **Sign and publish** (3 approvals). Or by hand:
+v1.2.1 is signed and published (napplet on blossom.primal.net, both events on
+wss://chiefmonkey.art/relay). For a future release, sign by hand:
 
 1. Sign both JSON files under `npub1a3um269aaf3u5cy37kuykrrrnsg2pyv7za06pxjduv25lq5sdujs2qmdj6`
    with your own signer (it sets `created_at`, `id`, `sig`).
