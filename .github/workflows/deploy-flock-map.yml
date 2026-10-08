@@ -31,6 +31,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify bundle (fresh build, lossless round-trip, CSP)
+        run: node tools/test.mjs
+
       - name: Install SSH key (host-key verified)
         env:
           SSH_KEY: ${{ secrets.VPS_DEPLOY_SSH_KEY }}
