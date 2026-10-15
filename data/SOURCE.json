@@ -3,8 +3,8 @@
   "query": "[out:json][timeout:300];node[\"man_made\"=\"surveillance\"][\"surveillance:type\"=\"ALPR\"];out body;",
   "license": "ODbL-1.0",
   "attribution": "© OpenStreetMap contributors",
-  "osm_timestamp": "2026-10-15T17:59:21Z",
+  "osm_timestamp": "2026-10-15T21:27:04Z",
   "data_date": "2026-10-15",
-  "endpoint": "https://overpass-api.de/api/interpreter",
-  "cameras": 154678
+  "endpoint": "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+  "cameras": 154701
 }
