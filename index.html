@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=' 'sha256-XgQaAF9zIH1b9EL7tnh/LdHsLRXSG26Tn0TVBmM5cV4='; style-src 'unsafe-inline'; img-src https://server.arcgisonline.com data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=' 'sha256-JyIl91Egv+6Lo+hFuyQKg5zK1+21hKSjxZ/nzwivkvs='; style-src 'unsafe-inline'; img-src https://server.arcgisonline.com data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
   <meta name="referrer" content="no-referrer" />
   <title>Flock Surveillance Map</title>
   <link rel="preconnect" href="https://server.arcgisonline.com" />
@@ -698,14 +698,14 @@ svg.leaflet-image-layer.leaflet-interactive path {
   <script>
 (function () {
   'use strict';
-  var VERSION = '1.2.1', CAMS_SRC = 'cams.js?v=154e33d69920909c', MODE = 'web';
+  var VERSION = '1.3.0', DATA_DATE = '2025-11-15', CAMS_SRC = 'cams.js?v=154e33d69920909c', MODE = 'web';
   var CLUSTER_OFF_ZOOM = 12, CELLS_MAX_ZOOM = 11, GRID = 64, PAD = 0.25, MAX_CANVAS_PX = 16e6, POPUP_MAX = 8;
   var t0 = performance.now();
   var msg = document.getElementById('msg'), gridBox = document.getElementById('grid');
 
   var map = L.map('map', { minZoom: 2, maxZoom: 18 }).setView([39.8, -98.5], 4);
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Esri, HERE, Garmin, &copy; OpenStreetMap contributors',
+    attribution: 'Cameras &copy; OpenStreetMap contributors via Ringmast4r/FLOCK · Basemap Esri, HERE, Garmin, &copy; OpenStreetMap contributors',
     maxNativeZoom: 16, maxZoom: 18,
   }).addTo(map);
   msg.textContent = 'loading cameras…';
@@ -961,7 +961,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     draw();
 
     var ms = Math.round(performance.now() - t0);
-    msg.textContent = N.toLocaleString() + ' cameras · ' + NC.toLocaleString() + ' cells · ' + ms + 'ms · v' + VERSION;
+    msg.textContent = N.toLocaleString() + ' cameras · data ' + DATA_DATE + ' · ' + ms + 'ms · v' + VERSION;
     window.__flock = { ready: true, n: N, cells: NC, ms: ms, version: VERSION, mode: MODE, map: map };
   }
 

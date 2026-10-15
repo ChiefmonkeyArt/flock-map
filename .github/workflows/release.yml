@@ -1,0 +1,59 @@
+name: Release on merge
+
+# When a merged PR lands on main with a VERSION that has no tag yet:
+# test, tag v$VERSION on that exact commit, then deploy that tag to the VPS.
+# Keeps VPS == tag == main HEAD without manual steps. Docs-only merges
+# (VERSION unchanged, tag already exists) do nothing.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Decide
+        id: d
+        run: |
+          set -euo pipefail
+          v="$(tr -d '[:space:]' < VERSION)"
+          echo "v=$v" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$v" >/dev/null; then
+            echo "tag v$v already exists; nothing to release" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Test
+        if: steps.d.outputs.go == 'true'
+        run: node tools/test.mjs && bash tools/test-ops.sh
+      - name: Tag and deploy
+        if: steps.d.outputs.go == 'true'
+        env:
+          V: ${{ steps.d.outputs.v }}
+        run: |
+          set -euo pipefail
+          git config user.name "flock-map-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$V" -m "v$V" "$GITHUB_SHA"
+          git push origin "v$V"
+          gh workflow run deploy-flock-map.yml --ref "v$V"
+          echo "Tagged v$V at $GITHUB_SHA and started the VPS deploy." >> "$GITHUB_STEP_SUMMARY"

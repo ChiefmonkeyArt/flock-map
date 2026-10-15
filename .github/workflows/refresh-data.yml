@@ -1,0 +1,100 @@
+name: Refresh camera data (weekly)
+
+# Pulls every ALPR camera from OpenStreetMap (same query DeFlock uses),
+# rebuilds the map, and opens/updates ONE pull request with the new data and
+# a patch version bump. Nothing reaches the VPS until the owner merges that
+# PR — merging is the approval; release.yml then tags and deploys.
+
+on:
+  schedule:
+    - cron: '17 4 * * 1'   # Mondays 04:17 UTC
+  workflow_dispatch:
+    inputs:
+      allow_drop:
+        description: 'Allow the camera count to fall by more than 25% (only if you expect it)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BRANCH: data/osm-refresh
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Fetch cameras from OpenStreetMap
+        id: fetch
+        run: |
+          set -euo pipefail
+          flag=""; [ "${{ inputs.allow_drop }}" = "true" ] && flag="--allow-drop"
+          node tools/refresh-osm.mjs $flag | tee /tmp/summary.json
+          if git diff --quiet -- data/; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No camera changes since the last release." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump patch version (next free tag)
+        if: steps.fetch.outputs.changed == 'true'
+        id: ver
+        run: |
+          set -euo pipefail
+          cur="$(tr -d '[:space:]' < VERSION)"
+          top="$( (echo "v$cur"; git tag -l 'v*') | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+          IFS=. read -r a b c <<< "$top"
+          next="$a.$b.$((c + 1))"
+          echo "$next" > VERSION
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Rebuild and test
+        if: steps.fetch.outputs.changed == 'true'
+        run: node tools/build.mjs && node tools/test.mjs && bash tools/test-ops.sh
+
+      - name: Open or update the data pull request
+        if: steps.fetch.outputs.changed == 'true'
+        env:
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          s=/tmp/summary.json
+          j() { node -e "process.stdout.write(String(require('$s')['$1']))"; }
+          git config user.name "flock-map-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add -A
+          git commit -q -m "v$V: camera data refresh ($(j data_date), $(j after) cameras)"
+          git push -f origin "$BRANCH"
+          body="Weekly OpenStreetMap camera refresh.
+
+          - Data date: **$(j data_date)**
+          - Cameras: $(j before) → **$(j after)** (+$(j added) new, −$(j removed) gone)
+          - Version: v$V
+
+          Merge to publish: release.yml tags v$V and deploys it to the VPS.
+          The napplet changes too, so its two Nostr events need re-signing to republish it."
+          body="$(printf '%s\n' "$body" | sed 's/^          //')"
+          title="v$V: camera data refresh ($(j data_date))"
+          if n="$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number')" && [ -n "$n" ]; then
+            gh pr edit "$n" --title "$title" --body "$body"
+          else
+            gh pr create --base main --head "$BRANCH" --title "$title" --body "$body"
+          fi
+          printf '%s\n' "$body" >> "$GITHUB_STEP_SUMMARY"
