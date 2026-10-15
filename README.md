@@ -53,6 +53,11 @@ until that PR is merged.
 VERSION with no tag yet, it tests, tags that commit and starts the VPS deploy,
 so VPS == tag == main. Docs-only merges do nothing.
 
+**Moving to ngit:** the planned decentralised release path (ngit + GRASP,
+VPS-side refresh, owner-signed approval) is drafted in
+[`docs/adr/0001-ngit-decentralised-releases.md`](docs/adr/0001-ngit-decentralised-releases.md)
+(status: Proposed). Until it is accepted and built, the GitHub path above is live.
+
 ## Build and test
 
 ```sh
