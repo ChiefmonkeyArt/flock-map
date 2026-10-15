@@ -1,9 +1,10 @@
 {
-  "source": "Ringmast4r/FLOCK (OpenStreetMap-derived), via a Nostr republish (legacy snapshot)",
-  "license": null,
+  "source": "OpenStreetMap",
+  "query": "[out:json][timeout:300];node[\"man_made\"=\"surveillance\"][\"surveillance:type\"=\"ALPR\"];out body;",
+  "license": "ODbL-1.0",
   "attribution": "© OpenStreetMap contributors",
-  "data_date": "2025-11-15",
-  "type_label": "type",
-  "credit": "Cameras &copy; OpenStreetMap contributors via Ringmast4r/FLOCK",
-  "cameras": 178674
+  "osm_timestamp": "2026-10-15T17:59:21Z",
+  "data_date": "2026-10-15",
+  "endpoint": "https://overpass-api.de/api/interpreter",
+  "cameras": 154678
 }
