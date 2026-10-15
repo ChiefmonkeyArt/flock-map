@@ -31,14 +31,14 @@
 {{INLINE_DATA}}  <script>
 (function () {
   'use strict';
-  var VERSION = '{{VERSION}}', CAMS_SRC = 'cams.js?v={{CAMS_HASH}}', MODE = '{{MODE}}';
+  var VERSION = '{{VERSION}}', DATA_DATE = '{{DATA_DATE}}', CAMS_SRC = 'cams.js?v={{CAMS_HASH}}', MODE = '{{MODE}}';
   var CLUSTER_OFF_ZOOM = 12, CELLS_MAX_ZOOM = 11, GRID = 64, PAD = 0.25, MAX_CANVAS_PX = 16e6, POPUP_MAX = 8;
   var t0 = performance.now();
   var msg = document.getElementById('msg'), gridBox = document.getElementById('grid');
 
   var map = L.map('map', { minZoom: 2, maxZoom: 18 }).setView([39.8, -98.5], 4);
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Esri, HERE, Garmin, &copy; OpenStreetMap contributors',
+    attribution: '{{DATA_CREDIT}} · Basemap Esri, HERE, Garmin, &copy; OpenStreetMap contributors',
     maxNativeZoom: 16, maxZoom: 18,
   }).addTo(map);
   msg.textContent = 'loading cameras…';
@@ -231,7 +231,7 @@
       for (var j = 0; j < Math.min(idx.length, POPUP_MAX); j++) {
         var i = idx[j], d = document.createElement('div'), b = document.createElement('b');
         b.textContent = H.names[D.name[i]] || 'camera';
-        d.appendChild(b); line(d, 'operator', H.ops[D.op[i]]); line(d, 'type', H.types[D.type[i]]);
+        d.appendChild(b); line(d, 'operator', H.ops[D.op[i]]); line(d, '{{TYPE_LABEL}}', H.types[D.type[i]]);
         root.appendChild(d);
       }
       if (idx.length > POPUP_MAX) {
@@ -294,7 +294,7 @@
     draw();
 
     var ms = Math.round(performance.now() - t0);
-    msg.textContent = N.toLocaleString() + ' cameras · ' + NC.toLocaleString() + ' cells · ' + ms + 'ms · v' + VERSION;
+    msg.textContent = N.toLocaleString() + ' cameras · data ' + DATA_DATE + ' · ' + ms + 'ms · v' + VERSION;
     window.__flock = { ready: true, n: N, cells: NC, ms: ms, version: VERSION, mode: MODE, map: map };
   }
 
