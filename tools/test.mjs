@@ -7,12 +7,15 @@
 //   4. the CSP's script hashes match the inline scripts, and there are no
 //      third-party script/style origins at runtime
 //   5. the deploy payload stays within the VPS whitelist
+//   6. the OSM refresh maps, cleans, dedupes and guards data correctly
+//   7. refresh/release workflows keep the owner's merge as the only gate
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import { build, loadSource, aggregateOf, PUBKEY_HEX, NAPPLET_FILES, VERSION } from './build.mjs';
+import { build, loadSource, validateMeta, aggregateOf, PUBKEY_HEX, NAPPLET_FILES, VERSION } from './build.mjs';
+import { toRecords, serialize, guard, diff, MIN_CAMERAS } from './refresh-osm.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -128,6 +131,48 @@ await t('unsigned kind 30617 is well-formed NIP-34', () => {
 await t('no private key material anywhere in generated outputs', () => {
   for (const f of ['napplet/dist/flock-map.nip5a.unsigned.json', 'napplet/dist/flock-map.nip34.unsigned.json', 'index.html', 'napplet/index.html'])
     assert.doesNotMatch(read(f), /nsec1[02-9ac-hj-np-z]{20,}|BEGIN [A-Z ]*PRIVATE KEY/);
+});
+
+await t('OSM refresh: tag mapping, cleaning, dedupe, stable sort', () => {
+  const els = [
+    { type: 'node', lat: 40.12345678, lon: -75.1, tags: { name: 'A\u0007 cam', operator: 'Town PD', manufacturer: 'Flock Safety' } },
+    { type: 'node', lat: 40.12345678, lon: -75.1, tags: { name: 'A\u0007 cam', operator: 'Town PD', manufacturer: 'Flock Safety' } },
+    { type: 'node', lat: 10, lon: 20, tags: { ref: 'R1', 'surveillance:operator': 'County', brand: 'Motorola' } },
+    { type: 'way', lat: 1, lon: 1, tags: {} },
+    { type: 'node', lat: 95, lon: 0, tags: {} },
+    { type: 'node', lat: 'x', lon: 0 },
+  ];
+  const r = toRecords(els);
+  assert.deepEqual(r, [[10, 20, 'R1', 'County', 'Motorola'], [40.1234568, -75.1, 'A cam', 'Town PD', 'Flock Safety']]);
+  const s = serialize(r);
+  assert.deepEqual(JSON.parse(s.slice(s.indexOf('=') + 1).trim().replace(/;$/, '')), r);
+  assert.equal(s.split('\n').length, r.length + 3, 'one record per line');
+  assert.deepEqual(diff([r[0]], r), { before: 1, after: 2, added: 1, removed: 0 });
+});
+
+await t('OSM refresh refuses broken or collapsed replies', () => {
+  const big = Array.from({ length: MIN_CAMERAS + 10 }, () => 0);
+  assert.throws(() => guard(big, big.slice(0, 1000)), /refusing/);
+  assert.throws(() => guard(big.concat(big), big), /fell/);
+  assert.doesNotThrow(() => guard(big.concat(big), big, true));
+  assert.doesNotThrow(() => guard(big, big));
+});
+
+await t('SOURCE.json values cannot inject into the page', () => {
+  const ok = { data_date: '2026-10-15', type_label: 'maker', credit: 'Cameras &copy; OpenStreetMap contributors (ODbL)' };
+  assert.equal(validateMeta(ok).data_date, '2026-10-15');
+  for (const bad of [{ credit: "x');alert(1);//" }, { credit: '<img src=x>' }, { data_date: '2026-10-15</script>' }, { type_label: "a'b" }])
+    assert.throws(() => validateMeta({ ...ok, ...bad }), /bad value/);
+});
+
+await t('refresh and release workflows: merge is the only gate to the VPS', () => {
+  const rf = read('.github/workflows/refresh-data.yml'), rl = read('.github/workflows/release.yml');
+  assert.doesNotMatch(rf, /deploy-flock-map|secrets\.|gh pr merge|git push[^\n]*\bmain\b/, 'refresh must only open a PR');
+  assert.match(rf, /git push -f origin "\$BRANCH"/);
+  assert.match(rl, /branches: \[main\]/);
+  assert.match(rl, /refs\/tags\/v\$v/, 'release must skip when the tag exists');
+  assert.match(rl, /gh workflow run deploy-flock-map\.yml --ref "v\$V"/);
+  assert.doesNotMatch(rl, /secrets\./, 'release holds no deploy secrets itself');
 });
 
 console.log(`${passed} passed`);
