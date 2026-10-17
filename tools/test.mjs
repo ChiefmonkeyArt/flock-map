@@ -16,6 +16,8 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { build, loadSource, validateMeta, aggregateOf, PUBKEY_HEX, NAPPLET_FILES, VERSION } from './build.mjs';
 import { toRecords, serialize, guard, diff, MIN_CAMERAS } from './refresh-osm.mjs';
+import { stateTags, bundle } from './ngit-events.mjs';
+import { OWNER_NPUB, GRASP_SERVERS } from './build.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -124,7 +126,17 @@ await t('unsigned kind 30617 is well-formed NIP-34', () => {
   assert.ok(!('id' in ev) && !('sig' in ev), 'must be unsigned');
   const tag = (k) => ev.tags.filter((y) => y[0] === k);
   assert.deepEqual(tag('d'), [['d', 'flock-map']]);
-  assert.deepEqual(tag('clone'), [['clone', 'https://github.com/ChiefmonkeyArt/flock-map.git']]);
+  assert.equal(OWNER_NPUB, 'npub1a3um269aaf3u5cy37kuykrrrnsg2pyv7za06pxjduv25lq5sdujs2qmdj6');
+  assert.equal(GRASP_SERVERS.length >= 3, true, 'ADR 0001: at least 3 GRASP servers');
+  const clone = tag('clone'), relays = tag('relays');
+  assert.equal(clone.length, 1); assert.equal(relays.length, 1);
+  // GRASP-01: each server must appear in BOTH clone and relays
+  for (const h of GRASP_SERVERS) {
+    assert.ok(clone[0].includes(`https://${h}/${OWNER_NPUB}/flock-map.git`), `clone missing ${h}`);
+    assert.ok(relays[0].includes(`wss://${h}`), `relays missing ${h}`);
+  }
+  assert.ok(clone[0].includes('https://github.com/ChiefmonkeyArt/flock-map.git'), 'GitHub stays as a mirror');
+  assert.ok(relays[0].includes('wss://chiefmonkey.art/relay'));
   assert.deepEqual(tag('r'), [['r', '12b015bd4a7d9022140aac3c6a3e5e027000edcc', 'euc']]);
 });
 
@@ -163,6 +175,27 @@ await t('SOURCE.json values cannot inject into the page', () => {
   assert.equal(validateMeta(ok).data_date, '2026-10-15');
   for (const bad of [{ credit: "x');alert(1);//" }, { credit: '<img src=x>' }, { data_date: '2026-10-15</script>' }, { type_label: "a'b" }])
     assert.throws(() => validateMeta({ ...ok, ...bad }), /bad value/);
+});
+
+await t('ngit state event mirrors git refs exactly (ngit tag peeling)', () => {
+  const a = 'a'.repeat(40), b = 'b'.repeat(40), c = 'c'.repeat(40), d = 'd'.repeat(40);
+  const showRef = [`${a} refs/heads/main`, `${b} refs/heads/feature`, `${c} refs/tags/v1.0.0`, `${a} refs/tags/v1.0.0^{}`,
+    `${d} refs/tags/junk`, `${b} refs/remotes/origin/main`].join('\n');
+  assert.deepEqual(stateTags(showRef), [['d', 'flock-map'], ['HEAD', 'ref: refs/heads/main'],
+    ['refs/heads/main', a], ['refs/tags/v1.0.0', c], ['refs/tags/v1.0.0^{}', a]]);
+  assert.throws(() => stateTags(`${c} refs/tags/v1.0.0`), /no refs\/heads\/main/);
+  const v = VERSION;
+  const B = bundle([`${a} refs/heads/main`, `${c} refs/tags/v${v}`, `${a} refs/tags/v${v}^{}`].join('\n'));
+  assert.deepEqual(B.steps.map((x) => x.event.kind), [35129, 30617, 30618]);
+  for (const x of B.steps) { assert.equal(x.event.pubkey, PUBKEY_HEX); assert.ok(!('sig' in x.event)); }
+  assert.throws(() => bundle([`${a} refs/heads/main`, `${c} refs/tags/v${v}`, `${b} refs/tags/v${v}^{}`].join('\n')), /must be tagged/);
+});
+
+await t('signing page: GitHub Pages runs only by hand, from main with full history', () => {
+  const pg = read('.github/workflows/pages.yml');
+  assert.doesNotMatch(pg, /push:/, 'pages must not auto-publish');
+  assert.match(pg, /fetch-depth: 0/); assert.match(pg, /node tools\/ngit-events\.mjs > _site\/ngit\/bundle\.json/);
+  assert.doesNotMatch(read('sign/index.html'), /nsec|privkey/i);
 });
 
 await t('refresh and release workflows: merge is the only gate to the VPS', () => {
