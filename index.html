@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=' 'sha256-OTF60yP/SWLhw/2nUjfWmblG21NwhQNt7GLQXP0y6Bs='; style-src 'unsafe-inline'; img-src https://server.arcgisonline.com data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=' 'sha256-8o6OWvCRxA+RqD7NcD56CyozUJDCFAmfa4WVH9au2bI='; style-src 'unsafe-inline'; img-src https://server.arcgisonline.com data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
   <meta name="referrer" content="no-referrer" />
   <title>Flock Surveillance Map</title>
   <link rel="preconnect" href="https://server.arcgisonline.com" />
@@ -698,7 +698,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
   <script>
 (function () {
   'use strict';
-  var VERSION = '1.3.2', DATA_DATE = '2026-10-15', CAMS_SRC = 'cams.js?v=e79b4eb6cd78d4ad', MODE = 'web';
+  var VERSION = '1.4.0', DATA_DATE = '2026-10-15', CAMS_SRC = 'cams.js?v=e79b4eb6cd78d4ad', MODE = 'web';
   var CLUSTER_OFF_ZOOM = 12, CELLS_MAX_ZOOM = 11, GRID = 64, PAD = 0.25, MAX_CANVAS_PX = 16e6, POPUP_MAX = 8;
   var t0 = performance.now();
   var msg = document.getElementById('msg'), gridBox = document.getElementById('grid');

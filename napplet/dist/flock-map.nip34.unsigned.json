@@ -9,7 +9,7 @@
     ],
     [
       "name",
-      "flock-map"
+      "Flock Map"
     ],
     [
       "description",
@@ -17,20 +17,43 @@
     ],
     [
       "web",
-      "https://chiefmonkey.art/flock-map/"
+      "https://chiefmonkey.art/flock-map/",
+      "https://gitworkshop.dev/npub1a3um269aaf3u5cy37kuykrrrnsg2pyv7za06pxjduv25lq5sdujs2qmdj6/flock-map"
     ],
     [
       "clone",
+      "https://relay.ngit.dev/npub1a3um269aaf3u5cy37kuykrrrnsg2pyv7za06pxjduv25lq5sdujs2qmdj6/flock-map.git",
+      "https://gitnostr.com/npub1a3um269aaf3u5cy37kuykrrrnsg2pyv7za06pxjduv25lq5sdujs2qmdj6/flock-map.git",
+      "https://git.shakespeare.diy/npub1a3um269aaf3u5cy37kuykrrrnsg2pyv7za06pxjduv25lq5sdujs2qmdj6/flock-map.git",
       "https://github.com/ChiefmonkeyArt/flock-map.git"
     ],
     [
       "relays",
+      "wss://relay.ngit.dev",
+      "wss://gitnostr.com",
+      "wss://git.shakespeare.diy",
       "wss://chiefmonkey.art/relay"
     ],
     [
       "r",
       "12b015bd4a7d9022140aac3c6a3e5e027000edcc",
       "euc"
+    ],
+    [
+      "t",
+      "alpr"
+    ],
+    [
+      "t",
+      "surveillance"
+    ],
+    [
+      "t",
+      "openstreetmap"
+    ],
+    [
+      "t",
+      "napplet"
     ]
   ],
   "content": "Flock Map — standalone self-hosted camera map and Nostr napplet."

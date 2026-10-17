@@ -4,9 +4,8 @@ name: Signing page (GitHub Pages)
 # and its unsigned events, so the page runs top-level where a NIP-07 signer
 # extension can answer it. No keys, no secrets: signing happens in the
 # operator's browser extension.
+# Run by hand only when the owner is about to sign; switch Pages off after.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -28,11 +27,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: main
+          fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - name: Assemble site
         run: |
           set -euo pipefail
-          mkdir -p _site/napplet/dist
+          mkdir -p _site/napplet/dist _site/ngit
+          node tools/ngit-events.mjs > _site/ngit/bundle.json
           cp sign/index.html _site/index.html
           cp napplet/index.html _site/napplet/index.html
           cp napplet/dist/flock-map.nip5a.unsigned.json napplet/dist/flock-map.nip34.unsigned.json _site/napplet/dist/

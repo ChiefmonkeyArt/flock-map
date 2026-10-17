@@ -144,9 +144,35 @@ const cspHash = (code) => `'sha256-${crypto.createHash('sha256').update(code, 'u
 // ---- napplet events (NEVER signed here; no key material in this repo) -----
 export const PUBKEY_HEX = 'ec79b568bdea63ca6091f5b84b0c639c10a0919e175fa09a4de3154f82906f25';
 const DTAG = 'flock-map';
-const RELAYS = ['wss://chiefmonkey.art/relay'];
-const CLONE_URL = 'https://github.com/ChiefmonkeyArt/flock-map.git';
+const OWN_RELAY = 'wss://chiefmonkey.art/relay';
+const RELAYS = [OWN_RELAY];
+const GITHUB_CLONE = 'https://github.com/ChiefmonkeyArt/flock-map.git';
+const CLONE_URL = GITHUB_CLONE;
 const WEB_URL = 'https://chiefmonkey.art/flock-map/';
+
+// ngit / GRASP hosting (ADR 0001, phase 1): ngit's default public GRASP
+// servers. Each serves a relay at wss://<host> and git at
+// https://<host>/<npub>/<d>.git; GRASP-01 requires both in the announcement.
+export const GRASP_SERVERS = ['relay.ngit.dev', 'gitnostr.com', 'git.shakespeare.diy'];
+
+const BECH = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+function bech32(hrp, hex) {
+  const data = [], bytes = Buffer.from(hex, 'hex');
+  let acc = 0, bits = 0;
+  for (const b of bytes) { acc = (acc << 8) | b; bits += 8; while (bits >= 5) { bits -= 5; data.push((acc >> bits) & 31); } }
+  if (bits) data.push((acc << (5 - bits)) & 31);
+  const G = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+  const poly = (v) => { let c = 1; for (const x of v) { const t = c >> 25; c = ((c & 0x1ffffff) << 5) ^ x; for (let i = 0; i < 5; i++) if ((t >> i) & 1) c ^= G[i]; } return c; };
+  const hx = [...hrp].map((c) => c.charCodeAt(0) >> 5).concat([0], [...hrp].map((c) => c.charCodeAt(0) & 31));
+  const p = poly(hx.concat(data, [0, 0, 0, 0, 0, 0])) ^ 1;
+  const cs = [0, 1, 2, 3, 4, 5].map((i) => (p >> (5 * (5 - i))) & 31);
+  return hrp + '1' + data.concat(cs).map((d) => BECH[d]).join('');
+}
+export const OWNER_NPUB = bech32('npub', PUBKEY_HEX);
+export const DTAG_ID = DTAG;
+export const REPO_RELAYS = GRASP_SERVERS.map((h) => `wss://${h}`).concat([OWN_RELAY]);
+export const REPO_CLONES = GRASP_SERVERS.map((h) => `https://${h}/${OWNER_NPUB}/${DTAG}.git`).concat([GITHUB_CLONE]);
+export const NAPPLET_RELAYS = [OWN_RELAY];
 const EARLIEST_COMMIT = '12b015bd4a7d9022140aac3c6a3e5e027000edcc';
 // The napplet bundle is an explicit list (not a directory walk) so dev files
 // such as README.md or shell-test.html can never leak into the aggregate.
@@ -173,11 +199,13 @@ function nappletEvents(files) {
   const nip34 = {
     kind: 30617, pubkey: PUBKEY_HEX, created_at: 0,
     tags: [
-      ['d', DTAG], ['name', 'flock-map'],
+      ['d', DTAG], ['name', 'Flock Map'],
       ['description', 'Self-hosted Flock Safety / ALPR camera surveillance map + standalone Nostr napplet.'],
-      ['web', WEB_URL], ['clone', CLONE_URL],
-      ...RELAYS.map((r) => ['relays', r]),
+      ['web', WEB_URL, `https://gitworkshop.dev/${OWNER_NPUB}/${DTAG}`],
+      ['clone', ...REPO_CLONES],
+      ['relays', ...REPO_RELAYS],
       ['r', EARLIEST_COMMIT, 'euc'],
+      ['t', 'alpr'], ['t', 'surveillance'], ['t', 'openstreetmap'], ['t', 'napplet'],
     ],
     content: 'Flock Map — standalone self-hosted camera map and Nostr napplet.',
   };
