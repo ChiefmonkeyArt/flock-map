@@ -21,7 +21,7 @@
     ],
     [
       "x",
-      "6d031583d1caf13dff8ebd382f73b98f8eb410a992c6904444f020056e7b3b21",
+      "5b39317e2fcec90b7a30e14c65182cb48fc0cbcc02ca83dc0d3efec6553e9819",
       "aggregate"
     ],
     [
@@ -39,8 +39,8 @@
     [
       "path",
       "/index.html",
-      "7da9eaf4b400d1616d9e9577188d4c5878075be56b995f0ca328cbc1dc66f02d"
+      "bd83a9bfbc01edecf84fd95a941bca6970e46aabac0cee5144a25bec98366962"
     ]
   ],
-  "content": "Flock Map napplet v1.4.0 — NIP-5A content-addressed single-file bundle (see path tags)."
+  "content": "Flock Map napplet v1.4.1 — NIP-5A content-addressed single-file bundle (see path tags)."
 }
